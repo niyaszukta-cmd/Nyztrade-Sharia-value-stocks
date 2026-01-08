@@ -9881,6 +9881,7 @@ INDIAN_HALAL_STOCKS = {
         "TATACOMM.NS": "Tata Communications Limited",
         "TTML.NS": "Tata Teleservices (Maharashtra) Limited",
 }
+}
 
 if __name__ == "__main__":
     main()
