@@ -863,7 +863,8 @@ def generate_halal_pdf_report(stock_info):
     buffer.seek(0)
     return buffer
 
-# Main application - keeping it concise to stay under token limits
+def main():
+    """Main application function"""
 
     
     with st.sidebar:
@@ -899,7 +900,7 @@ def generate_halal_pdf_report(stock_info):
             st.session_state['show_update_confirmation'] = True
         
         if st.session_state.get('show_update_confirmation', False):
-            st.warning("⚠️ This may take 30-60 minutes")
+            st.warning("⚠️ This may take 15-30 minutes for 229 stocks")
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✅ Confirm", use_container_width=True):
@@ -933,13 +934,14 @@ def generate_halal_pdf_report(stock_info):
         st.rerun()
     
     st.markdown("<h1 style='text-align: center;'>☪️ NYZTrade Halal Stock Screener</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #10b981;'>Shariah-Compliant Investment with Valuation</p>", unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["☪️ Halal Presets", "🔍 Custom Search", "📈 Individual Analysis"])
     
     with tab1:
         st.markdown("### ⚡ INSTANT HALAL STOCK SCREENING")
         if not db_exists:
-            st.warning("📊 Please update the database first")
+            st.warning("📊 Please update the database first using the sidebar button")
         else:
             preset_screeners = get_preset_screeners()
             selected_preset = st.selectbox("Choose Screener", list(preset_screeners.keys()))
@@ -959,23 +961,138 @@ def generate_halal_pdf_report(stock_info):
                         if criteria.get('min_upside'):
                             results_df = results_df[results_df['Upside %'] >= criteria['min_upside']]
                         results_df = results_df.nlargest(criteria.get('limit', 50), 'Upside %')
-                        st.success(f"✅ Found {len(results_df)} Halal stocks")
+                        st.success(f"✅ Found {len(results_df)} Halal stocks matching criteria")
+                        
                         if not results_df.empty:
                             display_df = results_df[['Ticker', 'Name', 'Halal Status', 'Current Price', 'Fair Value', 'Upside %']].copy()
+                            display_df['Current Price'] = display_df['Current Price'].apply(lambda x: f"₹{x:.2f}")
+                            display_df['Fair Value'] = display_df['Fair Value'].apply(lambda x: f"₹{x:.2f}")
+                            display_df['Upside %'] = display_df['Upside %'].apply(lambda x: f"{x:.2f}%")
                             st.dataframe(display_df, use_container_width=True, height=400)
+                            
+                            csv = results_df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download Results (CSV)",
+                                data=csv,
+                                file_name=f"halal_{selected_preset.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
+                        else:
+                            st.warning("No stocks found matching your criteria. Try adjusting filters.")
     
     with tab2:
         st.markdown("### 🔍 Custom Halal Stock Search")
-        st.info("💡 Search with custom filters")
+        st.info("💡 Build your own filters for Shariah-compliant stocks")
+        
+        with st.form("custom_search"):
+            col1, col2 = st.columns(2)
+            with col1:
+                halal_filter = st.selectbox("Halal Status", ["All", "HALAL", "DOUBTFUL", "NON-HALAL"])
+                market_cap_filter = st.selectbox("Market Cap", ["All", "Large Cap", "Mid Cap", "Small Cap"])
+            with col2:
+                max_debt = st.slider("Max Debt/Market Cap (%)", 0, 50, 33)
+                min_upside = st.slider("Min Upside (%)", 0, 100, 15)
+            
+            search_button = st.form_submit_button("🔍 Search Halal Stocks", use_container_width=True, type="primary")
+        
+        if search_button:
+            if not db_exists:
+                st.warning("Please update database first")
+            else:
+                with st.spinner("Searching..."):
+                    df = load_database()
+                    if not df.empty:
+                        filtered_df = screen_from_database(df, {
+                            'halal_status': halal_filter if halal_filter != "All" else None,
+                            'market_cap_category': market_cap_filter if market_cap_filter != "All" else None,
+                            'max_debt_ratio': max_debt / 100
+                        })
+                        results_df = calculate_valuations_batch(filtered_df)
+                        results_df = results_df[results_df['Upside %'] >= min_upside]
+                        results_df = results_df.sort_values('Upside %', ascending=False)
+                        st.success(f"✅ Found {len(results_df)} stocks")
+                        
+                        if not results_df.empty:
+                            display_df = results_df[['Ticker', 'Name', 'Halal Status', 'Current Price', 'Fair Value', 'Upside %']].head(50)
+                            st.dataframe(display_df, use_container_width=True, height=400)
     
     with tab3:
         st.markdown("### 📈 Individual Stock Analysis")
-        ticker_input = st.text_input("Enter Stock Ticker", placeholder="TICKER.NS")
-        if st.button("📊 Analyze", type="primary"):
-            st.info("Analysis feature coming soon")
+        st.info("💡 Analyze any stock for Halal compliance and valuation")
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            ticker_input = st.text_input("Enter Stock Ticker (e.g., TCS.NS)", placeholder="TICKER.NS")
+        with col2:
+            analyze_button = st.button("📊 Analyze Stock", use_container_width=True, type="primary")
+        
+        if analyze_button and ticker_input:
+            with st.spinner(f"Analyzing {ticker_input}..."):
+                stock_data = fetch_stock_data(ticker_input)
+                
+                if stock_data and stock_data.get('longName'):
+                    halal_info = get_halal_status(stock_data, selected_standard)
+                    
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.markdown(f"### {stock_data.get('longName', ticker_input)}")
+                    with col2:
+                        status = halal_info['status']
+                        if status == "HALAL":
+                            st.markdown(f"<div class='halal-badge'>{halal_info['status_emoji']} HALAL</div>", unsafe_allow_html=True)
+                        elif status == "DOUBTFUL":
+                            st.markdown(f"<div class='doubtful-badge'>{halal_info['status_emoji']} DOUBTFUL</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div class='non-halal-badge'>{halal_info['status_emoji']} NON-HALAL</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("#### ☪️ Shariah Compliance Analysis")
+                    for reason in halal_info['reasons']:
+                        if reason.startswith('✅'):
+                            st.markdown(f"<div class='compliance-card'>{reason}</div>", unsafe_allow_html=True)
+                        elif reason.startswith('❌'):
+                            st.markdown(f"<div class='non-compliance-card'>{reason}</div>", unsafe_allow_html=True)
+                        else:
+                            st.info(reason)
+                    
+                    if halal_info['compliance_scores']:
+                        st.markdown("#### 📊 Compliance Metrics")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            debt_ratio = halal_info['compliance_scores'].get('debt_ratio', 0)
+                            st.plotly_chart(create_compliance_gauge(debt_ratio, "Debt/Market Cap", 0.33), use_container_width=True)
+                        with col2:
+                            liquid_ratio = halal_info['compliance_scores'].get('liquid_ratio', 0)
+                            st.plotly_chart(create_compliance_gauge(liquid_ratio, "Liquid Assets", 0.33), use_container_width=True)
+                    
+                    current_price = safe_float(stock_data.get('currentPrice'))
+                    market_cap = safe_float(stock_data.get('marketCap'))
+                    
+                    if current_price and market_cap:
+                        market_cap_cat = get_market_cap_category(market_cap)
+                        fair_value, upside, pe_upside, ev_upside = calculate_valuations(stock_data, market_cap_cat)
+                        
+                        if fair_value:
+                            st.markdown("#### 💰 Valuation Analysis")
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Current Price", f"₹{current_price:.2f}")
+                            with col2:
+                                st.metric("Fair Value", f"₹{fair_value:.2f}")
+                            with col3:
+                                st.metric("Upside", f"{upside:.2f}%")
+                            
+                            st.plotly_chart(create_bar_chart(current_price, fair_value, ticker_input), use_container_width=True)
+                else:
+                    st.error("Stock not found or data unavailable. Please check the ticker symbol.")
     
     st.markdown("---")
-    st.markdown("<p style='text-align: center; color: #6b7280;'>☪️ Educational purposes only</p>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center; color: #6b7280;'>"
+        "☪️ This tool is for educational purposes only. Consult qualified Islamic scholars before investing."
+        "</p>",
+        unsafe_allow_html=True
+    )
 
 # NIFTY 500 STOCKS - Properly formatted with NO syntax errors
 INDIAN_HALAL_STOCKS = {
