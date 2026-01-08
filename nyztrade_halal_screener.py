@@ -1014,10 +1014,7 @@ def generate_halal_pdf_report(stock_info):
     return buffer
 
 # Main application
-def main():
-    if not check_password():
-        return
-    
+
     # Sidebar
     with st.sidebar:
         st.markdown(f"### 👤 Account")
