@@ -1659,7 +1659,7 @@ def generate_halal_pdf_report(stock_info):
 # INDIAN_HALAL_STOCKS dictionary - USER MUST POPULATE THIS
 # Add your stock universe here
 
-INDIAN_HALAL_STOCKS = {
+INDIAN_HALAL_STOCKS = 
     # ==================== IT SERVICES ====================
     "IT Services": {
         "TCS.NS": "Tata Consultancy Services Limited",
@@ -1881,10 +1881,7 @@ INDIAN_HALAL_STOCKS = {
         # Add more education stocks below
     },
     
-    # ==================== MISCELLANEOUS ====================
-    "Miscellaneous": {
-        # Add stocks that don't fit other categories
-    },
+ 
 
 def get_categories():
     """Get list of all available stock categories"""
