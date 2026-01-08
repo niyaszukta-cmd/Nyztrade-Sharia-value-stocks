@@ -864,9 +864,7 @@ def generate_halal_pdf_report(stock_info):
     return buffer
 
 # Main application - keeping it concise to stay under token limits
-def main():
-    if not check_password():
-        return
+
     
     with st.sidebar:
         st.markdown(f"### 👤 Account")
