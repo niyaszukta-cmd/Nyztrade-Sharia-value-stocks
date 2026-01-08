@@ -23,6 +23,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ==================== AUTHENTICATION CREDENTIALS ====================
+# Edit these credentials as needed
+USER_CREDENTIALS = {
+    "demo": "demo123",
+    "admin": "admin123",
+    "niyas": "buffet2026",
+    "user1": "password1",
+}
+# Add more users by adding lines like: "username": "password",
+# ===================================================================
+
 # Custom CSS
 st.markdown("""
 <style>
@@ -94,7 +105,47 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Authentication
+def check_password():
+    """Returns True if the user had the correct password."""
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        username = st.session_state.get("username", "")
+        password = st.session_state.get("password", "")
+        
+        if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
+            st.session_state["password_correct"] = True
+            st.session_state["user"] = username
+            # Clear password from session state for security
+            if "password" in st.session_state:
+                del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
 
+    if "password_correct" not in st.session_state:
+        # First time, show login screen
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("<h1 style='text-align: center;'>☪️ NYZTrade Halal Login</h1>", unsafe_allow_html=True)
+            st.text_input("Username", key="username")
+            st.text_input("Password", type="password", key="password", on_change=password_entered)
+            if st.button("Login", use_container_width=True):
+                password_entered()
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password incorrect, show error
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("<h1 style='text-align: center;'>☪️ NYZTrade Halal Login</h1>", unsafe_allow_html=True)
+            st.text_input("Username", key="username")
+            st.text_input("Password", type="password", key="password", on_change=password_entered)
+            st.error("😕 Incorrect username or password")
+            if st.button("Login", use_container_width=True):
+                password_entered()
+        return False
+    else:
+        # Password correct
+        return True
 
 # Shariah Compliance Criteria
 SHARIAH_STANDARDS = {
@@ -166,6 +217,7 @@ SMALLCAP_BENCHMARKS = {
 DB_PATH = "halal_stocks_database.db"
 
 def retry_on_failure(func, max_retries=3, delay=1):
+    """Retry a function with exponential backoff"""
     for attempt in range(max_retries):
         try:
             return func()
@@ -176,6 +228,7 @@ def retry_on_failure(func, max_retries=3, delay=1):
     return None
 
 def fetch_stock_data(ticker, max_retries=3):
+    """Fetch stock data with retry logic"""
     def _fetch():
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -188,6 +241,7 @@ def fetch_stock_data(ticker, max_retries=3):
         return None
 
 def safe_float(value, default=None):
+    """Safely convert value to float"""
     if value is None or value == '' or pd.isna(value):
         return default
     try:
@@ -196,6 +250,7 @@ def safe_float(value, default=None):
         return default
 
 def safe_int(value, default=None):
+    """Safely convert value to int"""
     if value is None or value == '' or pd.isna(value):
         return default
     try:
@@ -204,6 +259,7 @@ def safe_int(value, default=None):
         return default
 
 def check_business_activity_halal(stock_data):
+    """Check if core business activity is halal"""
     reasons = []
     is_halal = True
     
@@ -227,6 +283,7 @@ def check_business_activity_halal(stock_data):
     return is_halal, reasons
 
 def check_shariah_compliance(stock_data, standard="AAOIFI"):
+    """Check if stock meets Shariah compliance criteria"""
     criteria = SHARIAH_STANDARDS[standard]
     reasons = []
     compliance_scores = {}
@@ -272,6 +329,7 @@ def check_shariah_compliance(stock_data, standard="AAOIFI"):
     return is_compliant, reasons, compliance_scores
 
 def get_halal_status(stock_data, standard="AAOIFI"):
+    """Get overall halal status of a stock"""
     business_halal, business_reasons = check_business_activity_halal(stock_data)
     shariah_compliant, shariah_reasons, compliance_scores = check_shariah_compliance(stock_data, standard)
     
@@ -297,6 +355,7 @@ def get_halal_status(stock_data, standard="AAOIFI"):
     }
 
 def calculate_valuations(stock_data, market_cap_category):
+    """Calculate fair value using multiple methods"""
     try:
         industry = stock_data.get('industry', 'Default')
         if industry not in INDUSTRY_BENCHMARKS:
@@ -355,6 +414,7 @@ def calculate_valuations(stock_data, market_cap_category):
         return None, None, None, None
 
 def get_market_cap_category(market_cap):
+    """Categorize stock by market cap"""
     if market_cap >= 100000_00_00_000:
         return "Large Cap"
     elif market_cap >= 25000_00_00_000:
@@ -365,6 +425,7 @@ def get_market_cap_category(market_cap):
         return "Micro Cap"
 
 def create_database():
+    """Create SQLite database"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -407,6 +468,7 @@ def create_database():
     conn.close()
 
 def update_database(stock_dict, standard="AAOIFI", progress_callback=None):
+    """Update database with stock data"""
     create_database()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -483,6 +545,7 @@ def update_database(stock_dict, standard="AAOIFI", progress_callback=None):
 
 @st.cache_data(ttl=3600)
 def load_database():
+    """Load stock data from database"""
     try:
         conn = sqlite3.connect(DB_PATH)
         df = pd.read_sql_query("SELECT * FROM halal_stocks", conn)
@@ -501,10 +564,10 @@ def load_database():
         
         return df
     except Exception as e:
-        st.error(f"Error loading database: {str(e)}")
         return pd.DataFrame()
 
 def check_database_exists():
+    """Check if database exists"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -520,6 +583,7 @@ def check_database_exists():
         return False, 0, {}
 
 def screen_from_database(df, criteria):
+    """Screen stocks from database"""
     filtered_df = df.copy()
     
     if criteria.get('halal_status') and criteria['halal_status'] != "All":
@@ -560,6 +624,7 @@ def screen_from_database(df, criteria):
     return filtered_df
 
 def calculate_valuations_batch(df):
+    """Calculate valuations for batch"""
     results = []
     
     for idx, row in df.iterrows():
@@ -601,6 +666,7 @@ def calculate_valuations_batch(df):
     return pd.DataFrame(results)
 
 def get_preset_screeners():
+    """Define preset screeners"""
     return {
         "☪️ Top 50 Halal Large Caps": {
             "halal_status": "HALAL",
@@ -640,6 +706,7 @@ def get_preset_screeners():
     }
 
 def create_compliance_gauge(score, title, threshold=0.33):
+    """Create compliance gauge"""
     color = "#10b981" if score <= threshold else "#ef4444"
     
     fig = go.Figure(go.Indicator(
@@ -676,6 +743,7 @@ def create_compliance_gauge(score, title, threshold=0.33):
     return fig
 
 def create_valuation_gauge(value, title, range_max=100):
+    """Create valuation gauge"""
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
         value=value,
@@ -693,11 +761,6 @@ def create_valuation_gauge(value, title, range_max=100):
                 {'range': [25, 50], 'color': 'rgba(245, 158, 11, 0.3)'},
                 {'range': [50, range_max], 'color': 'rgba(16, 185, 129, 0.3)'}
             ],
-            'threshold': {
-                'line': {'color': "white", 'width': 4},
-                'thickness': 0.75,
-                'value': value
-            }
         }
     ))
     
@@ -711,6 +774,7 @@ def create_valuation_gauge(value, title, range_max=100):
     return fig
 
 def create_bar_chart(current, fair, ticker):
+    """Create price comparison chart"""
     fig = go.Figure(data=[
         go.Bar(name='Current Price', x=['Price'], y=[current], marker_color='#ef4444'),
         go.Bar(name='Fair Value', x=['Price'], y=[fair], marker_color='#10b981')
@@ -729,147 +793,14 @@ def create_bar_chart(current, fair, ticker):
     
     return fig
 
-def generate_halal_pdf_report(stock_info):
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    story = []
-    styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#059669'),
-        spaceAfter=30,
-        alignment=TA_CENTER
-    )
-    
-    story.append(Paragraph(f"☪️ Halal Stock Analysis Report", title_style))
-    story.append(Paragraph(f"{stock_info['ticker']}", title_style))
-    story.append(Spacer(1, 0.3*inch))
-    
-    data = [
-        ['Company Name', stock_info['name']],
-        ['Ticker', stock_info['ticker']],
-        ['Category', stock_info['category']],
-        ['Sector', stock_info.get('sector', 'N/A')],
-        ['Industry', stock_info.get('industry', 'N/A')],
-    ]
-    
-    t = Table(data, colWidths=[2*inch, 4*inch])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#059669')),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (1, 0), (1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    
-    story.append(t)
-    story.append(Spacer(1, 0.3*inch))
-    
-    story.append(Paragraph("Shariah Compliance Status", styles['Heading2']))
-    story.append(Spacer(1, 0.2*inch))
-    
-    status = stock_info.get('halal_status', 'UNKNOWN')
-    status_color = colors.HexColor('#10b981') if status == 'HALAL' else colors.HexColor('#ef4444')
-    
-    status_data = [
-        ['Status', status],
-        ['Business Activity', 'Halal' if stock_info.get('business_halal') else 'Non-Halal'],
-        ['Financial Compliance', 'Compliant' if stock_info.get('shariah_compliant') else 'Non-Compliant'],
-        ['Debt/Market Cap', f"{stock_info.get('debt_ratio', 0):.2%}"],
-        ['Liquid Assets/Market Cap', f"{stock_info.get('liquid_ratio', 0):.2%}"],
-    ]
-    
-    t2 = Table(status_data, colWidths=[2.5*inch, 3.5*inch])
-    t2.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), status_color),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-    ]))
-    
-    story.append(t2)
-    story.append(Spacer(1, 0.3*inch))
-    
-    story.append(Paragraph("Compliance Details", styles['Heading2']))
-    story.append(Spacer(1, 0.1*inch))
-    
-    reasons = stock_info.get('reasons', [])
-    for reason in reasons:
-        reason_style = ParagraphStyle(
-            'Reason',
-            parent=styles['Normal'],
-            fontSize=10,
-            spaceBefore=5,
-            spaceAfter=5
-        )
-        story.append(Paragraph(reason, reason_style))
-    
-    story.append(Spacer(1, 0.3*inch))
-    
-    story.append(Paragraph("Valuation Analysis", styles['Heading2']))
-    story.append(Spacer(1, 0.2*inch))
-    
-    valuation_data = [
-        ['Metric', 'Value'],
-        ['Current Price', f"₹{stock_info.get('current_price', 0):.2f}"],
-        ['Fair Value', f"₹{stock_info.get('fair_value', 0):.2f}"],
-        ['Upside Potential', f"{stock_info.get('upside', 0):.2f}%"],
-        ['Market Cap Category', stock_info.get('market_cap_cat', 'N/A')],
-        ['PE Ratio', f"{stock_info.get('pe_ratio', 0):.2f}"],
-        ['Investment Recommendation', stock_info.get('recommendation', 'N/A')],
-    ]
-    
-    t3 = Table(valuation_data, colWidths=[2.5*inch, 3.5*inch])
-    t3.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#059669')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-    ]))
-    
-    story.append(t3)
-    story.append(Spacer(1, 0.5*inch))
-    
-    disclaimer_style = ParagraphStyle(
-        'Disclaimer',
-        parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.grey,
-        alignment=TA_JUSTIFY
-    )
-    
-    story.append(Paragraph(
-        "<b>Disclaimer:</b> This report is for educational purposes only and does not constitute "
-        "investment advice or Shariah certification. The Shariah compliance assessment is based on "
-        "publicly available financial data and general screening criteria.",
-        disclaimer_style
-    ))
-    
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
-
 def main():
     """Main application function"""
-
+    if not check_password():
+        return
     
     with st.sidebar:
         st.markdown(f"### 👤 Account")
-        st.info(f"User: {st.session_state['user'].title()}")
+        st.info(f"User: **{st.session_state['user'].title()}**")
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
@@ -877,6 +808,7 @@ def main():
         st.markdown("---")
         st.markdown("### ☪️ Shariah Standard")
         selected_standard = st.selectbox("Select Standard", list(SHARIAH_STANDARDS.keys()))
+        st.info(f"📋 {SHARIAH_STANDARDS[selected_standard]['name']}")
         
         st.markdown("---")
         st.markdown("### 📊 Database Status")
@@ -891,16 +823,29 @@ def main():
                 st.metric("⚠️ Doubtful", status_counts.get('DOUBTFUL', 0))
             with col3:
                 st.metric("❌ Non-Halal", status_counts.get('NON-HALAL', 0))
+            
+            try:
+                df = load_database()
+                if not df.empty and 'last_updated' in df.columns:
+                    last_updated = pd.to_datetime(df['last_updated']).max()
+                    st.info(f"🕒 Updated: {last_updated.strftime('%Y-%m-%d %H:%M')}")
+            except:
+                pass
         else:
             st.warning("⚠️ No database found")
+            st.info("👉 Update database to start screening")
         
         st.markdown("---")
         st.markdown("### ⚙️ Database Management")
+        
+        total_to_update = sum(len(stocks) for stocks in INDIAN_HALAL_STOCKS.values())
+        st.info(f"📌 Will analyze {total_to_update} stocks")
+        
         if st.button("🔄 Update Database Now", use_container_width=True):
             st.session_state['show_update_confirmation'] = True
         
         if st.session_state.get('show_update_confirmation', False):
-            st.warning("⚠️ This may take 15-30 minutes for 229 stocks")
+            st.warning(f"⚠️ This may take 15-30 minutes for {total_to_update} stocks")
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✅ Confirm", use_container_width=True):
@@ -913,14 +858,17 @@ def main():
                     st.rerun()
     
     if st.session_state.get('updating_database', False):
-        st.markdown("## 🔄 Updating Database...")
+        st.markdown("## 🔄 Updating Database with Halal Compliance Analysis...")
         progress_bar = st.progress(0)
         status_text = st.empty()
+        failed_text = st.empty()
         halal_status_text = st.empty()
         
         def progress_callback(processed, total, failed, halal, doubtful, non_halal):
             progress_bar.progress(processed / total)
             status_text.text(f"Processed: {processed}/{total}")
+            if failed:
+                failed_text.text(f"Failed: {len(failed)} stocks")
             halal_status_text.text(f"☪️ Halal: {halal} | ⚠️ Doubtful: {doubtful} | ❌ Non-Halal: {non_halal}")
         
         failed_tickers, halal_count, doubtful_count, non_halal_count = update_database(
@@ -928,13 +876,19 @@ def main():
         )
         
         st.session_state['updating_database'] = False
-        st.success("✅ Database updated!")
+        st.success(f"✅ Database updated successfully!")
+        st.info(f"☪️ Halal: {halal_count} | ⚠️ Doubtful: {doubtful_count} | ❌ Non-Halal: {non_halal_count}")
+        
+        if failed_tickers:
+            with st.expander(f"⚠️ {len(failed_tickers)} stocks failed to fetch"):
+                st.write(failed_tickers)
+        
         st.cache_data.clear()
         time.sleep(2)
         st.rerun()
     
     st.markdown("<h1 style='text-align: center;'>☪️ NYZTrade Halal Stock Screener</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #10b981;'>Shariah-Compliant Investment with Valuation</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #10b981;'>Shariah-Compliant Investment Analysis with Valuation</p>", unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["☪️ Halal Presets", "🔍 Custom Search", "📈 Individual Analysis"])
     
@@ -944,10 +898,10 @@ def main():
             st.warning("📊 Please update the database first using the sidebar button")
         else:
             preset_screeners = get_preset_screeners()
-            selected_preset = st.selectbox("Choose Screener", list(preset_screeners.keys()))
+            selected_preset = st.selectbox("Choose Screener", list(preset_screeners.keys()), label_visibility="collapsed")
             
             if st.button("🚀 Run Halal Screening", use_container_width=True, type="primary"):
-                with st.spinner("Screening Halal stocks..."):
+                with st.spinner("Screening Halal stocks from database..."):
                     df = load_database()
                     if not df.empty:
                         criteria = preset_screeners[selected_preset]
@@ -961,13 +915,17 @@ def main():
                         if criteria.get('min_upside'):
                             results_df = results_df[results_df['Upside %'] >= criteria['min_upside']]
                         results_df = results_df.nlargest(criteria.get('limit', 50), 'Upside %')
+                        
                         st.success(f"✅ Found {len(results_df)} Halal stocks matching criteria")
                         
                         if not results_df.empty:
-                            display_df = results_df[['Ticker', 'Name', 'Halal Status', 'Current Price', 'Fair Value', 'Upside %']].copy()
+                            display_df = results_df[['Ticker', 'Name', 'Halal Status', 'Current Price', 'Fair Value', 'Upside %', 'PE Ratio', 'Debt Ratio']].copy()
                             display_df['Current Price'] = display_df['Current Price'].apply(lambda x: f"₹{x:.2f}")
                             display_df['Fair Value'] = display_df['Fair Value'].apply(lambda x: f"₹{x:.2f}")
                             display_df['Upside %'] = display_df['Upside %'].apply(lambda x: f"{x:.2f}%")
+                            display_df['PE Ratio'] = display_df['PE Ratio'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+                            display_df['Debt Ratio'] = display_df['Debt Ratio'].apply(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A")
+                            
                             st.dataframe(display_df, use_container_width=True, height=400)
                             
                             csv = results_df.to_csv(index=False)
@@ -980,19 +938,29 @@ def main():
                             )
                         else:
                             st.warning("No stocks found matching your criteria. Try adjusting filters.")
+                    else:
+                        st.error("Database is empty. Please update it first.")
     
     with tab2:
         st.markdown("### 🔍 Custom Halal Stock Search")
         st.info("💡 Build your own filters for Shariah-compliant stocks")
         
         with st.form("custom_search"):
+            st.markdown("#### ☪️ Halal Compliance Filters")
             col1, col2 = st.columns(2)
             with col1:
                 halal_filter = st.selectbox("Halal Status", ["All", "HALAL", "DOUBTFUL", "NON-HALAL"])
-                market_cap_filter = st.selectbox("Market Cap", ["All", "Large Cap", "Mid Cap", "Small Cap"])
+                max_debt = st.slider("Max Debt/Market Cap (%)", 0, 50, 33, help="Shariah standard: ≤33%")
             with col2:
-                max_debt = st.slider("Max Debt/Market Cap (%)", 0, 50, 33)
+                market_cap_filter = st.selectbox("Market Cap", ["All", "Large Cap", "Mid Cap", "Small Cap"])
+                max_liquid = st.slider("Max Liquid Assets (%)", 0, 50, 33, help="Shariah standard: ≤33%")
+            
+            st.markdown("#### 📊 Valuation Filters")
+            col3, col4 = st.columns(2)
+            with col3:
                 min_upside = st.slider("Min Upside (%)", 0, 100, 15)
+            with col4:
+                max_pe = st.slider("Max PE Ratio", 0, 50, 50)
             
             search_button = st.form_submit_button("🔍 Search Halal Stocks", use_container_width=True, type="primary")
         
@@ -1000,22 +968,46 @@ def main():
             if not db_exists:
                 st.warning("Please update database first")
             else:
-                with st.spinner("Searching..."):
+                with st.spinner("Searching Halal stocks..."):
                     df = load_database()
                     if not df.empty:
                         filtered_df = screen_from_database(df, {
                             'halal_status': halal_filter if halal_filter != "All" else None,
                             'market_cap_category': market_cap_filter if market_cap_filter != "All" else None,
-                            'max_debt_ratio': max_debt / 100
+                            'max_debt_ratio': max_debt / 100,
+                            'max_pe': max_pe if max_pe < 50 else None
                         })
+                        
+                        # Filter by liquid ratio
+                        if max_liquid < 50:
+                            filtered_df = filtered_df[filtered_df['liquid_ratio'] <= max_liquid / 100]
+                        
                         results_df = calculate_valuations_batch(filtered_df)
                         results_df = results_df[results_df['Upside %'] >= min_upside]
-                        results_df = results_df.sort_values('Upside %', ascending=False)
-                        st.success(f"✅ Found {len(results_df)} stocks")
+                        results_df = results_df.sort_values('Upside %', ascending=False).head(100)
+                        
+                        st.success(f"✅ Found {len(results_df)} stocks matching criteria")
                         
                         if not results_df.empty:
-                            display_df = results_df[['Ticker', 'Name', 'Halal Status', 'Current Price', 'Fair Value', 'Upside %']].head(50)
+                            display_df = results_df[['Ticker', 'Name', 'Halal Status', 'Current Price', 'Fair Value', 'Upside %', 'Debt Ratio', 'Liquid Ratio']].copy()
+                            display_df['Current Price'] = display_df['Current Price'].apply(lambda x: f"₹{x:.2f}")
+                            display_df['Fair Value'] = display_df['Fair Value'].apply(lambda x: f"₹{x:.2f}")
+                            display_df['Upside %'] = display_df['Upside %'].apply(lambda x: f"{x:.2f}%")
+                            display_df['Debt Ratio'] = display_df['Debt Ratio'].apply(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A")
+                            display_df['Liquid Ratio'] = display_df['Liquid Ratio'].apply(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A")
+                            
                             st.dataframe(display_df, use_container_width=True, height=400)
+                            
+                            csv = results_df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download Results (CSV)",
+                                data=csv,
+                                file_name=f"custom_halal_search_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
+                        else:
+                            st.warning("No stocks found. Try adjusting your filters.")
     
     with tab3:
         st.markdown("### 📈 Individual Stock Analysis")
@@ -1023,12 +1015,12 @@ def main():
         
         col1, col2 = st.columns([3, 1])
         with col1:
-            ticker_input = st.text_input("Enter Stock Ticker (e.g., TCS.NS)", placeholder="TICKER.NS")
+            ticker_input = st.text_input("Enter Stock Ticker (e.g., TCS.NS, INFY.NS)", placeholder="TICKER.NS")
         with col2:
             analyze_button = st.button("📊 Analyze Stock", use_container_width=True, type="primary")
         
         if analyze_button and ticker_input:
-            with st.spinner(f"Analyzing {ticker_input}..."):
+            with st.spinner(f"Analyzing {ticker_input} for Halal compliance..."):
                 stock_data = fetch_stock_data(ticker_input)
                 
                 if stock_data and stock_data.get('longName'):
@@ -1037,6 +1029,7 @@ def main():
                     col1, col2 = st.columns([2, 1])
                     with col1:
                         st.markdown(f"### {stock_data.get('longName', ticker_input)}")
+                        st.caption(f"{stock_data.get('sector', 'N/A')} • {stock_data.get('industry', 'N/A')}")
                     with col2:
                         status = halal_info['status']
                         if status == "HALAL":
@@ -1060,10 +1053,10 @@ def main():
                         col1, col2 = st.columns(2)
                         with col1:
                             debt_ratio = halal_info['compliance_scores'].get('debt_ratio', 0)
-                            st.plotly_chart(create_compliance_gauge(debt_ratio, "Debt/Market Cap", 0.33), use_container_width=True)
+                            st.plotly_chart(create_compliance_gauge(debt_ratio, "Debt/Market Cap Ratio", 0.33), use_container_width=True)
                         with col2:
                             liquid_ratio = halal_info['compliance_scores'].get('liquid_ratio', 0)
-                            st.plotly_chart(create_compliance_gauge(liquid_ratio, "Liquid Assets", 0.33), use_container_width=True)
+                            st.plotly_chart(create_compliance_gauge(liquid_ratio, "Liquid Assets Ratio", 0.33), use_container_width=True)
                     
                     current_price = safe_float(stock_data.get('currentPrice'))
                     market_cap = safe_float(stock_data.get('marketCap'))
@@ -1074,27 +1067,79 @@ def main():
                         
                         if fair_value:
                             st.markdown("#### 💰 Valuation Analysis")
-                            col1, col2, col3 = st.columns(3)
+                            col1, col2, col3, col4 = st.columns(4)
                             with col1:
                                 st.metric("Current Price", f"₹{current_price:.2f}")
                             with col2:
                                 st.metric("Fair Value", f"₹{fair_value:.2f}")
                             with col3:
                                 st.metric("Upside", f"{upside:.2f}%")
+                            with col4:
+                                st.metric("Market Cap", market_cap_cat)
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if pe_upside is not None:
+                                    st.plotly_chart(create_valuation_gauge(pe_upside, "PE Multiple Upside"), use_container_width=True)
+                            with col2:
+                                if ev_upside is not None:
+                                    st.plotly_chart(create_valuation_gauge(ev_upside, "EV/EBITDA Upside"), use_container_width=True)
                             
                             st.plotly_chart(create_bar_chart(current_price, fair_value, ticker_input), use_container_width=True)
+                            
+                            # Investment recommendation
+                            if halal_info['status'] == "HALAL":
+                                if upside > 25:
+                                    recommendation = "🚀 Strong Buy (Halal & Highly Undervalued)"
+                                elif upside > 15:
+                                    recommendation = "✅ Buy (Halal & Undervalued)"
+                                elif upside > 0:
+                                    recommendation = "📥 Hold (Halal & Fairly Valued)"
+                                else:
+                                    recommendation = "⏸️ Hold (Halal but Overvalued)"
+                            elif halal_info['status'] == "DOUBTFUL":
+                                recommendation = "⚠️ Caution (Requires Shariah review or income purification)"
+                            else:
+                                recommendation = "❌ Avoid (Not Shariah Compliant)"
+                            
+                            st.info(f"**Investment Recommendation:** {recommendation}")
+                            
+                            with st.expander("📋 Detailed Financial Information"):
+                                info_df = pd.DataFrame({
+                                    'Metric': [
+                                        'PE Ratio', 'Forward PE', 'PB Ratio', 'Dividend Yield',
+                                        'Beta', 'ROE', 'Profit Margin', '52W High', '52W Low'
+                                    ],
+                                    'Value': [
+                                        f"{stock_data.get('trailingPE', 0):.2f}",
+                                        f"{stock_data.get('forwardPE', 0):.2f}",
+                                        f"{stock_data.get('priceToBook', 0):.2f}",
+                                        f"{(stock_data.get('dividendYield', 0) * 100):.2f}%",
+                                        f"{stock_data.get('beta', 0):.2f}",
+                                        f"{(stock_data.get('returnOnEquity', 0) * 100):.2f}%",
+                                        f"{(stock_data.get('profitMargins', 0) * 100):.2f}%",
+                                        f"₹{stock_data.get('fiftyTwoWeekHigh', 0):.2f}",
+                                        f"₹{stock_data.get('fiftyTwoWeekLow', 0):.2f}"
+                                    ]
+                                })
+                                st.dataframe(info_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.warning("Could not calculate valuation for this stock")
+                    else:
+                        st.warning("Price or market cap data not available")
                 else:
-                    st.error("Stock not found or data unavailable. Please check the ticker symbol.")
+                    st.error("❌ Stock not found or data unavailable. Please check the ticker symbol (e.g., TCS.NS)")
     
     st.markdown("---")
     st.markdown(
         "<p style='text-align: center; color: #6b7280;'>"
-        "☪️ This tool is for educational purposes only. Consult qualified Islamic scholars before investing."
+        "☪️ This tool is for educational purposes only and does not constitute religious or investment advice. "
+        "Consult qualified Islamic scholars and financial advisors before making investment decisions."
         "</p>",
         unsafe_allow_html=True
     )
 
-# NIFTY 500 STOCKS - Properly formatted with NO syntax errors
+# NIFTY 500 STOCKS - Properly formatted
 INDIAN_HALAL_STOCKS = {
     "IT Services": {
         "TCS.NS": "Tata Consultancy Services Limited",
@@ -1132,12 +1177,6 @@ INDIAN_HALAL_STOCKS = {
         "EMAMILTD.NS": "Emami Limited",
         "TATACONSUM.NS": "Tata Consumer Products Limited",
     },
-    "Healthcare": {
-        "APOLLOHOSP.NS": "Apollo Hospitals Enterprise Limited",
-        "FORTIS.NS": "Fortis Healthcare Limited",
-        "MAXHEALTH.NS": "Max Healthcare Institute Limited",
-        "APOLLOTYRE.NS": "Apollo Tyres Limited",
-    },
     "Automobiles": {
         "MARUTI.NS": "Maruti Suzuki India Limited",
         "M&M.NS": "Mahindra and Mahindra Limited",
@@ -1158,7 +1197,6 @@ INDIAN_HALAL_STOCKS = {
         "DALMIACEM.NS": "Dalmia Bharat Limited",
         "RAMCOCEM.NS": "Ramco Cements Limited",
         "JKCEMENT.NS": "JK Cement Limited",
-        "HEIDELBERG.NS": "Heidelberg Cement India Limited",
     },
     "Metals": {
         "HINDALCO.NS": "Hindalco Industries Limited",
@@ -1169,8 +1207,6 @@ INDIAN_HALAL_STOCKS = {
         "JINDALSTEL.NS": "Jindal Steel and Power Limited",
         "NMDC.NS": "NMDC Limited",
         "COALINDIA.NS": "Coal India Limited",
-        "HINDZINC.NS": "Hindustan Zinc Limited",
-        "NATIONALUM.NS": "National Aluminium Company Limited",
     },
     "Oil and Gas": {
         "RELIANCE.NS": "Reliance Industries Limited",
@@ -1187,7 +1223,6 @@ INDIAN_HALAL_STOCKS = {
         "ADANIGREEN.NS": "Adani Green Energy Limited",
         "TATAPOWER.NS": "Tata Power Company Limited",
         "TORNTPOWER.NS": "Torrent Power Limited",
-        "NHPC.NS": "NHPC Limited",
     },
     "Telecom": {
         "BHARTIARTL.NS": "Bharti Airtel Limited",
@@ -1197,12 +1232,6 @@ INDIAN_HALAL_STOCKS = {
         "GODREJPROP.NS": "Godrej Properties Limited",
         "OBEROIRLTY.NS": "Oberoi Realty Limited",
         "PRESTIGE.NS": "Prestige Estates Projects Limited",
-        "BRIGADE.NS": "Brigade Enterprises Limited",
-    },
-    "Textiles": {
-        "ARVIND.NS": "Arvind Limited",
-        "RAYMOND.NS": "Raymond Limited",
-        "WELSPUNIND.NS": "Welspun India Limited",
     },
     "Infrastructure": {
         "LT.NS": "Larsen and Toubro Limited",
@@ -1210,7 +1239,6 @@ INDIAN_HALAL_STOCKS = {
         "GRASIM.NS": "Grasim Industries Limited",
         "ABB.NS": "ABB India Limited",
         "SIEMENS.NS": "Siemens Limited",
-        "BHEL.NS": "Bharat Heavy Electricals Limited",
     },
     "Chemicals": {
         "UPL.NS": "UPL Limited",
@@ -1222,18 +1250,6 @@ INDIAN_HALAL_STOCKS = {
     "Retail": {
         "DMART.NS": "Avenue Supermarts Limited",
         "TRENT.NS": "Trent Limited",
-        "SHOPERSTOP.NS": "Shoppers Stop Limited",
-        "VMART.NS": "V-Mart Retail Limited",
-    },
-    "Media": {
-        "PVRINOX.NS": "PVR INOX Limited",
-        "NAZARA.NS": "Nazara Technologies Limited",
-        "ZEEL.NS": "Zee Entertainment Enterprises Limited",
-    },
-    "Logistics": {
-        "BLUEDART.NS": "Blue Dart Express Limited",
-        "VRL.NS": "VRL Logistics Limited",
-        "MAHLOG.NS": "Mahindra Logistics Limited",
     },
 }
 
