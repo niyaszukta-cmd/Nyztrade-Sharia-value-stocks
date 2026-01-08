@@ -10374,5 +10374,4 @@ SMALLCAP_BENCHMARKS = {
     'Real Estate': {'pe': 30, 'ev_ebitda': 22},
     'Default': {'pe': 24, 'ev_ebitda': 16}
 }
-if __name__ == "__main__":
-    main()
+
