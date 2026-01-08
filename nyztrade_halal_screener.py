@@ -216,67 +216,6 @@ SMALLCAP_BENCHMARKS = {
 
 DB_PATH = "halal_stocks_database.db"
 
-def load_stocks_from_csv(csv_path):
-    """Load stock universe from CSV file"""
-    try:
-        df = pd.read_csv(csv_path)
-        
-        # Expected columns: Ticker, Name, Category Name
-        if 'Ticker' not in df.columns or 'Name' not in df.columns:
-            st.error("CSV must have 'Ticker' and 'Name' columns")
-            return {}
-        
-        # Set default category if not present
-        if 'Category Name' not in df.columns:
-            df['Category Name'] = 'Uncategorized'
-        
-        # Clean data
-        df = df.dropna(subset=['Ticker', 'Name'])
-        df['Category Name'] = df['Category Name'].fillna('Uncategorized')
-        
-        # Filter out banks, NBFCs, and other non-halal sectors
-        non_halal_keywords = [
-            'bank', 'nbfc', 'insurance', 'finance corp', 'financial services',
-            'distillery', 'brewery', 'liquor', 'wine', 'alcohol',
-            'casino', 'gambling', 'lottery'
-        ]
-        
-        def is_potentially_non_halal(category):
-            if pd.isna(category):
-                return False
-            category_lower = str(category).lower()
-            return any(keyword in category_lower for keyword in non_halal_keywords)
-        
-        # Create a warning for filtered stocks
-        non_halal_count = df['Category Name'].apply(is_potentially_non_halal).sum()
-        
-        # Group by category
-        stocks_dict = {}
-        for category, group in df.groupby('Category Name'):
-            # Skip obvious non-halal categories
-            if is_potentially_non_halal(category):
-                continue
-            
-            category_stocks = {}
-            for _, row in group.iterrows():
-                ticker = str(row['Ticker']).strip()
-                name = str(row['Name']).strip()
-                
-                # Ensure ticker has .NS or .BO suffix
-                if not (ticker.endswith('.NS') or ticker.endswith('.BO')):
-                    ticker = ticker + '.NS'
-                
-                category_stocks[ticker] = name
-            
-            if category_stocks:
-                stocks_dict[category] = category_stocks
-        
-        return stocks_dict, non_halal_count
-    
-    except Exception as e:
-        st.error(f"Error loading CSV: {str(e)}")
-        return {}, 0
-
 def retry_on_failure(func, max_retries=3, delay=1):
     """Retry a function with exponential backoff"""
     for attempt in range(max_retries):
@@ -433,71 +372,71 @@ def calculate_valuations(stock_data, market_cap_category):
         if not current_price or current_price <= 0:
             return None, None, None, None
         
+        # PE MULTIPLE METHOD - FIXED
         trailing_pe = safe_float(stock_data.get('trailingPE'))
         forward_pe = safe_float(stock_data.get('forwardPE'))
         eps = safe_float(stock_data.get('trailingEps'))
         
-        # PE-based fair value calculation
         pe_fair_value = None
         if eps and eps > 0:
-            target_pe = None
-            if trailing_pe and trailing_pe > 0:
-                # Blend historical PE with industry benchmark
-                target_pe = (trailing_pe * 0.7) + (benchmarks['pe'] * 0.3)
-            elif forward_pe and forward_pe > 0:
-                # Use forward PE if trailing not available
-                target_pe = (forward_pe * 0.7) + (benchmarks['pe'] * 0.3)
-            else:
-                # Fall back to industry benchmark
-                target_pe = benchmarks['pe']
-            
-            if target_pe and target_pe > 0:
-                pe_fair_value = eps * target_pe
+            # Use benchmark PE directly (don't blend with current overvalued PE)
+            target_pe = benchmarks['pe']
+            pe_fair_value = eps * target_pe
         
-        # EV/EBITDA-based fair value calculation
+        # EV/EBITDA METHOD - FIXED
         enterprise_value = safe_float(stock_data.get('enterpriseValue'))
         ebitda = safe_float(stock_data.get('ebitda'))
         market_cap = safe_float(stock_data.get('marketCap'))
         total_debt = safe_float(stock_data.get('totalDebt', 0))
         total_cash = safe_float(stock_data.get('totalCash', 0))
-        shares_outstanding = safe_float(stock_data.get('sharesOutstanding'))
         
         ev_ebitda_fair_value = None
-        if ebitda and ebitda > 0 and shares_outstanding and shares_outstanding > 0:
-            # Calculate current EV/EBITDA or use benchmark
-            if enterprise_value and enterprise_value > 0:
-                current_ev_ebitda = enterprise_value / ebitda
-                target_ev_ebitda = (current_ev_ebitda * 0.5) + (benchmarks['ev_ebitda'] * 0.5)
-            else:
-                target_ev_ebitda = benchmarks['ev_ebitda']
-            
-            # Calculate fair enterprise value
+        if ebitda and ebitda > 0 and market_cap and market_cap > 0:
+            # Calculate target enterprise value using benchmark
+            target_ev_ebitda = benchmarks['ev_ebitda']
             fair_enterprise_value = ebitda * target_ev_ebitda
             
-            # Convert enterprise value to equity value (market cap)
-            # EV = Market Cap + Debt - Cash
-            # Market Cap = EV - Debt + Cash
-            fair_market_cap = fair_enterprise_value - total_debt + total_cash
+            # Convert EV to Market Cap: Market Cap = EV - Debt + Cash
+            ev_ebitda_fair_value = fair_enterprise_value - total_debt + total_cash
             
-            # Convert to price per share
-            if fair_market_cap > 0:
-                ev_ebitda_fair_value = fair_market_cap / shares_outstanding
+            # Sanity check: fair value should be positive
+            if ev_ebitda_fair_value <= 0:
+                ev_ebitda_fair_value = None
         
         # Combine fair values
         fair_values = [v for v in [pe_fair_value, ev_ebitda_fair_value] if v is not None and v > 0]
         if not fair_values:
             return None, None, None, None
         
-        avg_fair_value = sum(fair_values) / len(fair_values)
+        # Calculate per-share fair value
+        shares_outstanding = safe_float(stock_data.get('sharesOutstanding'))
+        if not shares_outstanding or shares_outstanding <= 0:
+            return None, None, None, None
         
-        # Sanity check: fair value shouldn't be more than 10x current price
-        if avg_fair_value > current_price * 10:
-            avg_fair_value = current_price * 1.5  # Conservative estimate
+        # Convert market cap-based fair values to per-share prices
+        fair_value_per_share_list = []
         
+        if pe_fair_value and pe_fair_value > 0:
+            # PE method already gives per-share value
+            fair_value_per_share_list.append(pe_fair_value)
+        
+        if ev_ebitda_fair_value and ev_ebitda_fair_value > 0:
+            # Convert market cap to per-share price
+            ev_fair_price_per_share = ev_ebitda_fair_value / shares_outstanding
+            fair_value_per_share_list.append(ev_fair_price_per_share)
+        
+        if not fair_value_per_share_list:
+            return None, None, None, None
+        
+        # Average the per-share fair values
+        avg_fair_value = sum(fair_value_per_share_list) / len(fair_value_per_share_list)
+        
+        # Calculate upside
         upside_potential = ((avg_fair_value - current_price) / current_price) * 100
         
+        # Calculate individual upsides
         pe_upside = ((pe_fair_value - current_price) / current_price * 100) if pe_fair_value else None
-        ev_upside = ((ev_ebitda_fair_value - current_price) / current_price * 100) if ev_ebitda_fair_value else None
+        ev_upside = ((ev_fair_price_per_share - current_price) / current_price * 100) if ev_ebitda_fair_value else None
         
         return avg_fair_value, upside_potential, pe_upside, ev_upside
     
@@ -715,10 +654,14 @@ def screen_from_database(df, criteria):
     return filtered_df
 
 def calculate_valuations_batch(df):
-    """Calculate valuations for batch"""
+    """Calculate valuations for batch - FIXED VERSION"""
     results = []
     
     for idx, row in df.iterrows():
+        # Skip if essential data is missing
+        if pd.isna(row['price']) or pd.isna(row['market_cap']) or row['price'] <= 0:
+            continue
+        
         stock_data = {
             'currentPrice': row['price'],
             'marketCap': row['market_cap'],
@@ -727,13 +670,16 @@ def calculate_valuations_batch(df):
             'trailingEps': row['eps'],
             'enterpriseValue': row['enterprise_value'],
             'ebitda': row['ebitda'],
-            'industry': row['industry']
+            'industry': row['industry'],
+            'totalDebt': row['total_debt'],
+            'totalCash': row['total_cash'],
+            'sharesOutstanding': row['shares_outstanding']
         }
         
         market_cap_cat = get_market_cap_category(row['market_cap']) if pd.notna(row['market_cap']) else "Micro Cap"
         fair_value, upside, pe_upside, ev_upside = calculate_valuations(stock_data, market_cap_cat)
         
-        if fair_value is not None:
+        if fair_value is not None and fair_value > 0:
             results.append({
                 'Ticker': row['ticker'],
                 'Name': row['name'],
@@ -889,11 +835,6 @@ def main():
     if not check_password():
         return
     
-    # Initialize stock universe in session state
-    if 'stocks_universe' not in st.session_state:
-        st.session_state['stocks_universe'] = INDIAN_HALAL_STOCKS
-        st.session_state['universe_source'] = 'Default'
-    
     with st.sidebar:
         st.markdown(f"### 👤 Account")
         st.info(f"User: **{st.session_state['user'].title()}**")
@@ -905,48 +846,6 @@ def main():
         st.markdown("### ☪️ Shariah Standard")
         selected_standard = st.selectbox("Select Standard", list(SHARIAH_STANDARDS.keys()))
         st.info(f"📋 {SHARIAH_STANDARDS[selected_standard]['name']}")
-        
-        st.markdown("---")
-        st.markdown("### 📂 Stock Universe")
-        
-        # CSV Upload
-        uploaded_file = st.file_uploader(
-            "Upload Stock Universe (CSV)",
-            type=['csv'],
-            help="CSV must have columns: Ticker, Name, Category Name"
-        )
-        
-        if uploaded_file is not None:
-            if st.button("📥 Load CSV Universe", use_container_width=True):
-                with st.spinner("Loading stock universe from CSV..."):
-                    stocks_dict, filtered_count = load_stocks_from_csv(uploaded_file)
-                    if stocks_dict:
-                        st.session_state['stocks_universe'] = stocks_dict
-                        st.session_state['universe_source'] = uploaded_file.name
-                        
-                        total_stocks = sum(len(stocks) for stocks in stocks_dict.values())
-                        st.success(f"✅ Loaded {total_stocks} stocks from {len(stocks_dict)} categories")
-                        if filtered_count > 0:
-                            st.warning(f"⚠️ Filtered out {filtered_count} potentially non-halal stocks (banks, insurance, etc.)")
-                        
-                        # Clear database so it will be updated with new universe
-                        if st.checkbox("Clear existing database?", value=True):
-                            try:
-                                import os
-                                if os.path.exists(DB_PATH):
-                                    os.remove(DB_PATH)
-                                    st.info("🗑️ Database cleared. Please update with new universe.")
-                            except:
-                                pass
-                    else:
-                        st.error("Failed to load CSV. Check format.")
-        
-        # Show current universe info
-        universe_stocks = st.session_state['stocks_universe']
-        total_in_universe = sum(len(stocks) for stocks in universe_stocks.values())
-        categories_count = len(universe_stocks)
-        
-        st.info(f"📊 Current Universe:\n- Source: {st.session_state['universe_source']}\n- {total_in_universe} stocks\n- {categories_count} categories")
         
         st.markdown("---")
         st.markdown("### 📊 Database Status")
@@ -976,21 +875,20 @@ def main():
         st.markdown("---")
         st.markdown("### ⚙️ Database Management")
         
-        total_to_update = sum(len(stocks) for stocks in universe_stocks.values())
-        st.info(f"📌 Will analyze {total_to_update} stocks")
-        
-        if total_to_update > 1000:
-            st.warning(f"⏰ Large universe! May take 2-4 hours")
-        elif total_to_update > 500:
-            st.warning(f"⏰ This may take 1-2 hours")
+        total_to_update = sum(len(stocks) for stocks in INDIAN_HALAL_STOCKS.values())
+        if total_to_update > 0:
+            st.info(f"📌 Will analyze {total_to_update} stocks")
         else:
-            st.info(f"⏰ This may take 15-30 minutes")
+            st.warning("⚠️ No stocks in universe. Add stocks in code!")
         
         if st.button("🔄 Update Database Now", use_container_width=True):
-            st.session_state['show_update_confirmation'] = True
+            if total_to_update == 0:
+                st.error("❌ Please add stocks to INDIAN_HALAL_STOCKS dictionary first!")
+            else:
+                st.session_state['show_update_confirmation'] = True
         
         if st.session_state.get('show_update_confirmation', False):
-            st.warning(f"⚠️ This will analyze {total_to_update} stocks")
+            st.warning(f"⚠️ This may take time for {total_to_update} stocks")
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✅ Confirm", use_container_width=True):
@@ -1017,7 +915,7 @@ def main():
             halal_status_text.text(f"☪️ Halal: {halal} | ⚠️ Doubtful: {doubtful} | ❌ Non-Halal: {non_halal}")
         
         failed_tickers, halal_count, doubtful_count, non_halal_count = update_database(
-            st.session_state['stocks_universe'], selected_standard, progress_callback
+            INDIAN_HALAL_STOCKS, selected_standard, progress_callback
         )
         
         st.session_state['updating_database'] = False
@@ -1284,9 +1182,45 @@ def main():
         unsafe_allow_html=True
     )
 
-# NIFTY 500 STOCKS - Properly formatted
+# ==================== STOCK UNIVERSE PLACEHOLDER ====================
+# ADD YOUR STOCKS HERE - Follow this format exactly:
+#
+# CSV FORMAT: Ticker,Name,Category Name
+# Example from your CSV:
+#   BHARTIARTL.NS,Bharti Airtel Limited,Wireless Communications
+#   ASHOKLEY.NS,Ashok Leyland Limited,Auto Manufacturers - Major
+#
+# PYTHON FORMAT (convert CSV to Python dictionary):
+# "Category Name": {
+#     "TICKER.NS": "Company Full Name",
+#     "TICKER.NS": "Company Full Name",
+# },
+#
+# EXAMPLE:
+# INDIAN_HALAL_STOCKS = {
+#     "Wireless Communications": {
+#         "BHARTIARTL.NS": "Bharti Airtel Limited",
+#     },
+#     "Auto Manufacturers - Major": {
+#         "ASHOKLEY.NS": "Ashok Leyland Limited",
+#         "MARUTI.NS": "Maruti Suzuki India Limited",
+#     },
+#     "Drugs - Generic": {
+#         "AUROPHARMA.NS": "Aurobindo Pharma Limited",
+#         "DRREDDY.NS": "Dr. Reddy's Laboratories Limited",
+#     },
+# }
+#
+# NOTES:
+# - Remove banks (Money Center Banks, Regional Banks)
+# - Remove NBFCs and insurance companies
+# - Remove alcohol/tobacco companies
+# - All tickers end with .NS (NSE) or .BO (BSE)
+# - Every line MUST end with a comma (even the last one in each category)
+# - Every category MUST end with },
+# =====================================================================
 
-INDIAN_STOCKS = {
+INDIAN_HALAL_STOCKS = {
    
     "Agricultural Chemicals": {
         "ARIES.NS": "Aries Agro Limited",
@@ -9946,62 +9880,7 @@ INDIAN_STOCKS = {
         "RCOM.NS": "Reliance Communications Limited",
         "TATACOMM.NS": "Tata Communications Limited",
         "TTML.NS": "Tata Teleservices (Maharashtra) Limited",
-    },
-
 }
-
-def get_categories():
-    """Get list of all available stock categories"""
-    return list(INDIAN_STOCKS.keys())
-
-# ============================================================================
-# INDUSTRY BENCHMARKS
-# ============================================================================
-
-INDUSTRY_BENCHMARKS = {
-    # Large Cap Benchmarks
-    'Technology': {'pe': 25, 'ev_ebitda': 15},
-    'Financial Services': {'pe': 18, 'ev_ebitda': 12},
-    'Consumer Cyclical': {'pe': 30, 'ev_ebitda': 14},
-    'Consumer Defensive': {'pe': 35, 'ev_ebitda': 16},
-    'Healthcare': {'pe': 28, 'ev_ebitda': 14},
-    'Industrials': {'pe': 22, 'ev_ebitda': 12},
-    'Energy': {'pe': 15, 'ev_ebitda': 8},
-    'Basic Materials': {'pe': 18, 'ev_ebitda': 10},
-    'Communication Services': {'pe': 20, 'ev_ebitda': 12},
-    'Real Estate': {'pe': 25, 'ev_ebitda': 18},
-    'Utilities': {'pe': 16, 'ev_ebitda': 10},
-    'Default': {'pe': 20, 'ev_ebitda': 12}
-}
-
-# Midcap specific benchmarks
-MIDCAP_BENCHMARKS = {
-    'Technology': {'pe': 28, 'ev_ebitda': 16},
-    'Financial Services': {'pe': 20, 'ev_ebitda': 14},
-    'Consumer Cyclical': {'pe': 32, 'ev_ebitda': 16},
-    'Consumer Defensive': {'pe': 38, 'ev_ebitda': 18},
-    'Healthcare': {'pe': 30, 'ev_ebitda': 16},
-    'Industrials': {'pe': 25, 'ev_ebitda': 14},
-    'Energy': {'pe': 18, 'ev_ebitda': 10},
-    'Basic Materials': {'pe': 20, 'ev_ebitda': 12},
-    'Real Estate': {'pe': 28, 'ev_ebitda': 20},
-    'Default': {'pe': 22, 'ev_ebitda': 14}
-}
-
-# Smallcap specific benchmarks
-SMALLCAP_BENCHMARKS = {
-    'Technology': {'pe': 30, 'ev_ebitda': 18},
-    'Financial Services': {'pe': 18, 'ev_ebitda': 12},
-    'Consumer Cyclical': {'pe': 35, 'ev_ebitda': 18},
-    'Consumer Defensive': {'pe': 40, 'ev_ebitda': 20},
-    'Healthcare': {'pe': 32, 'ev_ebitda': 18},
-    'Industrials': {'pe': 28, 'ev_ebitda': 16},
-    'Energy': {'pe': 20, 'ev_ebitda': 12},
-    'Basic Materials': {'pe': 22, 'ev_ebitda': 14},
-    'Real Estate': {'pe': 30, 'ev_ebitda': 22},
-    'Default': {'pe': 24, 'ev_ebitda': 16}
-}
-
 
 if __name__ == "__main__":
     main()
