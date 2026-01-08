@@ -1,0 +1,1 @@
+# Nyztrade-Sharia-value-stocks
