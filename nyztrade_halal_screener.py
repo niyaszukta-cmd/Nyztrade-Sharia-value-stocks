@@ -10328,6 +10328,6 @@ def get_categories():
     return list(INDIAN_STOCKS.keys())
 
 if __name__ == "__main__":
-    main()
+    .main()
 
 
