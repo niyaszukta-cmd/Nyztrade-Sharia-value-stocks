@@ -1656,10 +1656,25 @@ def generate_halal_pdf_report(stock_info):
         unsafe_allow_html=True
     )
 
-# INDIAN_HALAL_STOCKS dictionary - USER MUST POPULATE THIS
-# Add your stock universe here
+# INDIAN_HALAL_STOCKS DICTIONARY TEMPLATE
+# 
+# INSTRUCTIONS:
+# 1. Each category is a dictionary of stocks
+# 2. Format: "TICKER.NS": "Company Full Name",  ← NOTE THE COMMA!
+# 3. Last entry in each category should also have a comma (Python allows trailing commas)
+# 4. Use .NS for NSE stocks, .BO for BSE stocks
+# 5. Company names should be in quotes
+# 6. Avoid special characters or use plain ASCII
+#
+# COMMON ERRORS TO AVOID:
+# ❌ Missing comma after stock entry
+# ❌ Unclosed quote in company name
+# ❌ Missing closing brace } for category
+# ❌ Special characters causing encoding issues
+#
+# EXAMPLE OF CORRECT FORMAT:
 
-INDIAN_HALAL_STOCKS = 
+INDIAN_HALAL_STOCKS = {
     # ==================== IT SERVICES ====================
     "IT Services": {
         "TCS.NS": "Tata Consultancy Services Limited",
@@ -1881,6 +1896,43 @@ INDIAN_HALAL_STOCKS =
         # Add more education stocks below
     },
     
+    # ==================== MISCELLANEOUS ====================
+    "Miscellaneous": {
+        # Add stocks that don't fit other categories
+    },
+    
+    # ==================== ADD MORE CATEGORIES BELOW ====================
+    # Copy the template below to add new categories:
+    #
+    # "Category Name": {
+    #     "TICKER1.NS": "Company Name 1",
+    #     "TICKER2.NS": "Company Name 2",
+    #     "TICKER3.NS": "Company Name 3",
+    # },
+}
+
+# ==================== VALIDATION TIPS ====================
+#
+# After editing, run: python validate_halal_syntax.py
+# This will check for syntax errors before running the app
+#
+# ==================== EXCLUDED SECTORS ====================
+#
+# DO NOT ADD stocks from these sectors (Non-Halal):
+# ❌ Banks (Conventional Banking)
+# ❌ NBFCs (Non-Banking Financial Companies)
+# ❌ Insurance Companies (Conventional Insurance)
+# ❌ Alcohol Companies (Breweries, Distilleries)
+# ❌ Tobacco Companies
+# ❌ Gambling/Casino Companies
+# ❌ Adult Entertainment
+# ❌ Weapons Manufacturers (Defense)
+# ❌ Pork Products
+#
+# These will be automatically flagged as NON-HALAL by the screener
+# but it's better to exclude them from the start to save processing time
+#
+# =======================================================
  
 
 def get_categories():
