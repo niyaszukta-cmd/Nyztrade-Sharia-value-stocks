@@ -94,38 +94,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Authentication
-def check_password():
-    def password_entered():
-        if st.session_state["username"] in st.secrets.get("passwords", {}) and \
-           st.session_state["password"] == st.secrets["passwords"][st.session_state["username"]]:
-            st.session_state["password_correct"] = True
-            st.session_state["user"] = st.session_state["username"]
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
 
-    if "password_correct" not in st.session_state:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("<h1 style='text-align: center;'>☪️ NYZTrade Halal Login</h1>", unsafe_allow_html=True)
-            st.text_input("Username", key="username")
-            st.text_input("Password", type="password", key="password", on_change=password_entered)
-            if st.button("Login", use_container_width=True):
-                password_entered()
-        return False
-    elif not st.session_state["password_correct"]:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("<h1 style='text-align: center;'>☪️ NYZTrade Halal Login</h1>", unsafe_allow_html=True)
-            st.text_input("Username", key="username")
-            st.text_input("Password", type="password", key="password", on_change=password_entered)
-            st.error("😕 User not known or password incorrect")
-            if st.button("Login", use_container_width=True):
-                password_entered()
-        return False
-    else:
-        return True
 
 # Shariah Compliance Criteria
 SHARIAH_STANDARDS = {
