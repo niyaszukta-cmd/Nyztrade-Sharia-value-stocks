@@ -10327,51 +10327,7 @@ def get_categories():
     """Get list of all available stock categories"""
     return list(INDIAN_STOCKS.keys())
 
-# ============================================================================
-# INDUSTRY BENCHMARKS
-# ============================================================================
+if __name__ == "__main__":
+    main()
 
-INDUSTRY_BENCHMARKS = {
-    # Large Cap Benchmarks
-    'Technology': {'pe': 25, 'ev_ebitda': 15},
-    'Financial Services': {'pe': 18, 'ev_ebitda': 12},
-    'Consumer Cyclical': {'pe': 30, 'ev_ebitda': 14},
-    'Consumer Defensive': {'pe': 35, 'ev_ebitda': 16},
-    'Healthcare': {'pe': 28, 'ev_ebitda': 14},
-    'Industrials': {'pe': 22, 'ev_ebitda': 12},
-    'Energy': {'pe': 15, 'ev_ebitda': 8},
-    'Basic Materials': {'pe': 18, 'ev_ebitda': 10},
-    'Communication Services': {'pe': 20, 'ev_ebitda': 12},
-    'Real Estate': {'pe': 25, 'ev_ebitda': 18},
-    'Utilities': {'pe': 16, 'ev_ebitda': 10},
-    'Default': {'pe': 20, 'ev_ebitda': 12}
-}
-
-# Midcap specific benchmarks
-MIDCAP_BENCHMARKS = {
-    'Technology': {'pe': 28, 'ev_ebitda': 16},
-    'Financial Services': {'pe': 20, 'ev_ebitda': 14},
-    'Consumer Cyclical': {'pe': 32, 'ev_ebitda': 16},
-    'Consumer Defensive': {'pe': 38, 'ev_ebitda': 18},
-    'Healthcare': {'pe': 30, 'ev_ebitda': 16},
-    'Industrials': {'pe': 25, 'ev_ebitda': 14},
-    'Energy': {'pe': 18, 'ev_ebitda': 10},
-    'Basic Materials': {'pe': 20, 'ev_ebitda': 12},
-    'Real Estate': {'pe': 28, 'ev_ebitda': 20},
-    'Default': {'pe': 22, 'ev_ebitda': 14}
-}
-
-# Smallcap specific benchmarks
-SMALLCAP_BENCHMARKS = {
-    'Technology': {'pe': 30, 'ev_ebitda': 18},
-    'Financial Services': {'pe': 18, 'ev_ebitda': 12},
-    'Consumer Cyclical': {'pe': 35, 'ev_ebitda': 18},
-    'Consumer Defensive': {'pe': 40, 'ev_ebitda': 20},
-    'Healthcare': {'pe': 32, 'ev_ebitda': 18},
-    'Industrials': {'pe': 28, 'ev_ebitda': 16},
-    'Energy': {'pe': 20, 'ev_ebitda': 12},
-    'Basic Materials': {'pe': 22, 'ev_ebitda': 14},
-    'Real Estate': {'pe': 30, 'ev_ebitda': 22},
-    'Default': {'pe': 24, 'ev_ebitda': 16}
-}
 
