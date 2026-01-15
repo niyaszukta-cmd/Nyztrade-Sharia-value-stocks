@@ -26,7 +26,7 @@ st.set_page_config(
 # ==================== AUTHENTICATION CREDENTIALS ====================
 # Edit these credentials as needed
 USER_CREDENTIALS = {
-    "demo": "demo123",
+    "demo": "demo444",
     "admin": "admin123",
     "niyas": "buffet2026",
     "user1": "password1",
